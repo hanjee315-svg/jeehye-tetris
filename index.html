@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>지혜의 테트리스 게임</title>
+  <style>
+    /* 디자인 시스템 변수화: 정돈된 아키텍처 인상을 줌 */
+    :root {
+      --bg-gradient-start: #0f172a;
+      --bg-gradient-end: #020617;
+      --panel-bg: rgba(15, 23, 42, 0.95);
+      --panel-border: #1e293b;
+      --accent-color: #38bdf8;
+      --accent-hover: #7dd3fc;
+      --text-muted: #94a3b8;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: radial-gradient(circle at top, var(--bg-gradient-start), var(--bg-gradient-end));
+      color: white;
+      font-family: Arial, sans-serif;
+    }
+
+    .container {
+      display: flex;
+      gap: 24px;
+      align-items: flex-start;
+      padding: 24px;
+    }
+
+    .game-panel,
+    .side-panel {
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 18px;
+      padding: 20px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+    }
+
+    h1 {
+      margin: 0 0 16px;
+      font-size: 34px;
+      letter-spacing: -1px;
+    }
+
+    h2 {
+      margin: 0 0 12px;
+      font-size: 20px;
+    }
+
+    canvas {
+      display: block;
+      background: #020617;
+      border: 3px solid #334155;
+      border-radius: 12px;
+    }
+
+    .side-panel {
+      width: 240px;
+    }
+
+    .score-box {
+      margin-bottom: 20px;
+      line-height: 1.9;
+      color: var(--text-muted);
+    }
+
+    .score-box strong {
+      float: right;
+      color: white;
+    }
+
+    #next {
+      width: 120px;
+      height: 120px;
+      margin-bottom: 20px;
+    }
+
+    .controls {
+      color: var(--text-muted);
+      font-size: 14px;
+      line-height: 1.7;
+      margin-bottom: 18px;
+    }
+
+    button {
+      width: 100%;
+      padding: 12px;
+      margin-top: 8px;
+      border: none;
+      border-radius: 12px;
+      background: var(--accent-color);
+      color: #020617;
+      font-size: 15px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+
+    button:hover {
+      background: var(--accent-hover);
+    }
+
+    .message {
+      margin-top: 14px;
+      padding: 10px;
+      border-radius: 10px;
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid #ef4444;
+      color: #fecaca;
+      text-align: center;
+      display: none;
+    }
+
+    .leaderboard-list {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.8;
+    }
+
+    @media (max-width: 720px) {
+      body {
+        align-items: flex-start;
+      }
+      .container {
+        flex-direction: column;
+        align-items: center;
+      }
+      .side-panel {
+        width: 100%;
+        max-width: 320px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="game-panel">
+      <!-- 대제목을 요청하신 대로 변경했습니다 -->
+      <h1>지혜의 테트리스 게임</h1>
+      <canvas id="board" width="300" height="600"></canvas>
+      <div id="message" class="message">게임 오버! 다시 시작을 눌러주세요.</div>
+    </div>
+
+    <div class="side-panel">
+      <h2>상태</h2>
+      <div class="score-box">
+        점수 <strong id="score">0</strong><br />
+        라인 <strong id="lines">0</strong><br />
+        레벨 <strong id="level">1</strong><br />
+        상태 <strong id="status">진행중</strong>
+      </div>
+
+      <h2>다음 블록</h2>
+      <canvas id="next" width="120" height="120"></canvas>
+
+      <div class="controls">
+        ← → : 이동<br />
+        ↓ : 빠르게 내리기<br />
+        ↑ : 회전<br />
+        Space : 바로 떨어뜨리기<br />
+        P : 일시정지<br />
+        R : 다시 시작
+      </div>
+
+      <button onclick="togglePause()">일시정지 / 재개</button>
+      <button onclick="resetGame()">다시 시작</button>
+
+      <div style="margin-top: 24px;">
+        <h2>🏆 실시간 랭킹</h2>
+        <div id="leaderboard" class="leaderboard-list">불러오는 중...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Firebase SDK 인라인 로드로 스크립트 파편화 방지 -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import {
+      getFirestore,
+      collection,
+      addDoc,
+      query,
+      orderBy,
+      limit,
+      getDocs
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    // ----------------------------------------------------
+    // 0. GAME CONFIG & CONSTANTS (유지보수용 상수화)
+    // ----------------------------------------------------
+    const GAME_SETTING = {
+      COLS: 10,
+      ROWS: 20,
+      BLOCK_SIZE: 30,
+      NEXT_BLOCK_SIZE: 24,
+      BASE_SPEED: 850,       // 레벨 1 기본 속도 (ms)
+      SPEED_STEP: 70,        // 레벨업마다 빨라지는 속도
+      MIN_SPEED: 100,        // 최고 속도 제한
+      LINES_PER_LEVEL: 10,   // 레벨업 기준 라인 수
+      SCORE_TABLE: [0, 100, 300, 500, 800] // 라인 클리어 점수 (0~4라인)
+    };
+
+    const COLORS = {
+      I: "#22d3ee", J: "#3b82f6", L: "#fb923c",
+      O: "#fde047", S: "#4ade80", T: "#a855f7", Z: "#ef4444"
+    };
+
+    const SHAPES = {
+      I: [[1, 1, 1, 1]],
+      J: [[1, 0, 0], [1, 1, 1]],
+      L: [[0, 0, 1], [1, 1, 1]],
+      O: [[1, 1], [1, 1]],
+      S: [[0, 1, 1], [1, 1, 0]],
+      T: [[0, 1, 0], [1, 1, 1]],
+      Z: [[1, 1, 0], [0, 1, 1]]
+    };
+
+    // ----------------------------------------------------
+    // 1. FIREBASE INITIALIZATION & SERVICE
+    // ----------------------------------------------------
+    const firebaseConfig = {
+      apiKey: "AIzaSyAWcEI8CZVAbvkzWaG4yAXcu6SCVy-Q-R0",
+      authDomain: "jeehye-tetris.firebaseapp.com",
+      projectId: "jeehye-tetris",
+      storageBucket: "jeehye-tetris.firebasestorage.app",
+      messagingSenderId: "800818408582",
+      appId: "1:800818408582:web:0e3daf687501aef2407507"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    async function dbSaveScore(finalScore) {
+      if (finalScore <= 0) return;
+      try {
+        await addDoc(collection(db, "leaderboard"), {
+          score: finalScore,
+          createdAt: Date.now()
+        });
+        dbLoadLeaderboard();
+      } catch (error) {
+        console.error("[Firebase Error] 랭킹 저장 실패:", error);
+      }
+    }
+
+    async function dbLoadLeaderboard() {
+      try {
+        const q = query(
+          collection(db, "leaderboard"),
+          orderBy("score", "desc"),
+          limit(10)
+        );
+        const snapshot = await getDocs(q);
+        if (snapshot.empty) {
+          document.getElementById("leaderboard").innerHTML = "기록이 없습니다.";
+          return;
+        }
+
+        let html = "";
+        let rank = 1;
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          html += `${rank}. 익명 플레이어 — ${data.score}점<br>`;
+          rank++;
+        });
+        document.getElementById("leaderboard").innerHTML = html;
+      } catch (error) {
+        console.error("[Firebase Error] 로드 실패:", error);
+        document.getElementById("leaderboard").innerHTML = "랭킹 로드 실패";
+      }
+    }
+
+    // ----------------------------------------------------
+    // 2. GAME ENGINE STATE
+    // ----------------------------------------------------
+    const canvas = document.getElementById("board");
+    const ctx = canvas.getContext("2d");
+    const nextCanvas = document.getElementById("next");
+    const nextCtx = nextCanvas.getContext("2d");
+
+    let board;
+    let piece;
+    let nextPiece;
+    let score;
+    let lines;
+    let level;
+    let gameOver;
+    let paused;
+    let dropCounter;
+    let lastTime;
+
+    function createBoard() {
+      return Array.from({ length: GAME_SETTING.ROWS }, () => Array(GAME_SETTING.COLS).fill(null));
+    }
+
+    function generateRandomPiece() {
+      const types = Object.keys(SHAPES);
+      const type = types[Math.floor(Math.random() * types.length)];
+      return {
+        type,
+        shape: SHAPES[type].map(row => [...row]),
+        color: COLORS[type],
+        x: Math.floor(GAME_SETTING.COLS / 2) - 2,
+        y: 0
+      };
+    }
+
+    // ----------------------------------------------------
+    // 3. RENDERING LOGIC
+    // ----------------------------------------------------
+    function renderBlock(context, x, y, color, size = GAME_SETTING.BLOCK_SIZE) {
+      context.fillStyle = color;
+      context.fillRect(x * size, y * size, size, size);
+      context.strokeStyle = "rgba(255,255,255,0.18)";
+      context.lineWidth = 2;
+      context.strokeRect(x * size + 1, y * size + 1, size - 2, size - 2);
+    }
+
+    function renderBoard() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#020617";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      for (let y = 0; y < GAME_SETTING.ROWS; y++) {
+        for (let x = 0; x < GAME_SETTING.COLS; x++) {
+          if (board[y][x]) {
+            renderBlock(ctx, x, y, board[y][x]);
+          } else {
+            ctx.strokeStyle = "rgba(148, 163, 184, 0.08)";
+            ctx.strokeRect(x * GAME_SETTING.BLOCK_SIZE, y * GAME_SETTING.BLOCK_SIZE, GAME_SETTING.BLOCK_SIZE, GAME_SETTING.BLOCK_SIZE);
+          }
+        }
+      }
+      renderPiece(ctx, piece);
+    }
+
+    function renderPiece(context, targetPiece, offsetX = 0, offsetY = 0, size = GAME_SETTING.BLOCK_SIZE) {
+      targetPiece.shape.forEach((row, y) => {
+        row.forEach((value, x) => {
+          if (value) {
+            renderBlock(
+              context,
+              targetPiece.x + x + offsetX,
+              targetPiece.y + y + offsetY,
+              targetPiece.color,
+              size
+            );
+          }
+        });
+      });
+    }
+
+    function renderNextPiecePreview() {
+      nextCtx.clearRect(0, 0, nextCanvas.width, nextCanvas.height);
+      nextCtx.fillStyle = "#020617";
+      nextCtx.fillRect(0, 0, nextCanvas.width, nextCanvas.height);
+
+      const size = GAME_SETTING.NEXT_BLOCK_SIZE;
+      const tempPreview = {
+        ...nextPiece,
+        x: Math.floor((5 - nextPiece.shape[0].length) / 2),
+        y: Math.floor((5 - nextPiece.shape.length) / 2)
+      };
+
+      renderPiece(nextCtx, tempPreview, 0, 0, size);
+    }
+
+    // ----------------------------------------------------
+    // 4. CORE CORE CORE LOGIC (COLLISION & MOVEMENT)
+    // ----------------------------------------------------
+    function checkCollision(testPiece, offsetX = 0, offsetY = 0, newShape = testPiece.shape) {
+      for (let y = 0; y < newShape.length; y++) {
+        for (let x = 0; x < newShape[y].length; x++) {
+          if (!newShape[y][x]) continue;
+
+          const newX = testPiece.x + x + offsetX;
+          const newY = testPiece.y + y + offsetY;
+
+          if (newX < 0 || newX >= GAME_SETTING.COLS || newY >= GAME_SETTING.ROWS) return true;
+          if (newY >= 0 && board[newY][newX]) return true;
+        }
+      }
+      return false;
+    }
+
+    function mergePieceToGrid() {
+      piece.shape.forEach((row, y) => {
+        row.forEach((value, x) => {
+          if (value) {
+            board[piece.y + y][piece.x + x] = piece.color;
+          }
+        });
+      });
+    }
+
+    function processLineClears() {
+      let cleared = 0;
+      for (let y = GAME_SETTING.ROWS - 1; y >= 0; y--) {
+        if (board[y].every(cell => cell)) {
+          board.splice(y, 1);
+          board.unshift(Array(GAME_SETTING.COLS).fill(null));
+          cleared++;
+          y++; 
+        }
+      }
+
+      if (cleared > 0) {
+        score += GAME_SETTING.SCORE_TABLE[cleared] * level;
+        lines += cleared;
+        level = Math.floor(lines / GAME_SETTING.LINES_PER_LEVEL) + 1;
+      }
+    }
+
+    function spawnNextPiece() {
+      piece = nextPiece;
+      piece.x = Math.floor(GAME_SETTING.COLS / 2) - 2;
+      piece.y = 0;
+      nextPiece = generateRandomPiece();
+
+      if (checkCollision(piece)) {
+        handleGameOver();
+      }
+    }
+
+    function movePiece(dx, dy) {
+      if (paused || gameOver) return;
+
+      if (!checkCollision(piece, dx, dy)) {
+        piece.x += dx;
+        piece.y += dy;
+      } else if (dy > 0) {
+        mergePieceToGrid();
+        processLineClears();
+        spawnNextPiece();
+      }
+    }
+
+    function rotatePiece() {
+      if (paused || gameOver) return;
+
+      const rotatedShape = piece.shape[0].map((_, index) =>
+        piece.shape.map(row => row[index]).reverse()
+      );
+
+      if (!checkCollision(piece, 0, 0, rotatedShape)) {
+        piece.shape = rotatedShape;
+      } else if (!checkCollision(piece, -1, 0, rotatedShape)) {
+        piece.x -= 1;
+        piece.shape = rotatedShape;
+      } else if (!checkCollision(piece, 1, 0, rotatedShape)) {
+        piece.x += 1;
+        piece.shape = rotatedShape;
+      }
+    }
+
+    function dropInstantly() {
+      if (paused || gameOver) return;
+
+      let distance = 0;
+      while (!checkCollision(piece, 0, distance + 1)) {
+        distance++;
+      }
+      piece.y += distance;
+      score += distance * 2; 
+
+      mergePieceToGrid();
+      processLineClears();
+      spawnNextPiece();
+    }
+
+    // ----------------------------------------------------
+    // 5. GAMEFLOW & UI MANAGEMENT
+    // ----------------------------------------------------
+    function syncUiState() {
+      document.getElementById("score").textContent = score;
+      document.getElementById("lines").textContent = lines;
+      document.getElementById("level").textContent = level;
+      document.getElementById("status").textContent = gameOver
+        ? "종료"
+        : paused
+          ? "정지"
+          : "진행중";
+    }
+
+    function handleGameOver() {
+      gameOver = true;
+      document.getElementById("message").style.display = "block";
+      syncUiState();
+      dbSaveScore(score); 
+    }
+
+    window.togglePause = function() {
+      if (gameOver) return;
+      paused = !paused;
+      syncUiState();
+    };
+
+    window.resetGame = function() {
+      board = createBoard();
+      piece = generateRandomPiece();
+      nextPiece = generateRandomPiece();
+      score = 0;
+      lines = 0;
+      level = 1;
+      gameOver = false;
+      paused = false;
+      dropCounter = 0;
+      lastTime = 0;
+      document.getElementById("message").style.display = "none";
+      syncUiState();
+      renderBoard();
+      renderNextPiecePreview();
+    };
+
+    function gameLoop(time = 0) {
+      const deltaTime = time - lastTime;
+      lastTime = time;
+
+      if (!paused && !gameOver) {
+        dropCounter += deltaTime;
+        const dropInterval = Math.max(
+          GAME_SETTING.MIN_SPEED, 
+          GAME_SETTING.BASE_SPEED - (level - 1) * GAME_SETTING.SPEED_STEP
+        );
+
+        if (dropCounter > dropInterval) {
+          movePiece(0, 1);
+          dropCounter = 0;
+        }
+      }
+
+      renderBoard();
+      renderNextPiecePreview();
+      syncUiState();
+      requestAnimationFrame(gameLoop);
+    }
+
+    // ----------------------------------------------------
+    // 6. INITIALIZATION & EVENTS
+    // ----------------------------------------------------
+    document.addEventListener("keydown", event => {
+      if (event.key === "ArrowLeft") movePiece(-1, 0);
+      if (event.key === "ArrowRight") movePiece(1, 0);
+      if (event.key === "ArrowDown") movePiece(0, 1);
+      if (event.key === "ArrowUp") rotatePiece();
+      if (event.code === "Space") {
+        event.preventDefault(); 
+        dropInstantly();
+      }
+      if (event.key.toLowerCase() === "p") togglePause();
+      if (event.key.toLowerCase() === "r") resetGame();
+    });
+
+    // 부트스트랩
+    dbLoadLeaderboard();
+    resetGame();
+    gameLoop();
+  </script>
+</body>
+</html>
