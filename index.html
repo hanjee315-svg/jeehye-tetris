@@ -2,10 +2,9 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>지혜의 테트리스 게임</title>
   <style>
-    /* 디자인 시스템 변수화: 정돈된 아키텍처 인상을 줌 */
     :root {
       --bg-gradient-start: #0f172a;
       --bg-gradient-end: #020617;
@@ -18,6 +17,8 @@
 
     * {
       box-sizing: border-box;
+      /* 모바일 터치 시 파란색 하이라이트 박스 제거 */
+      -webkit-tap-highlight-color: transparent;
     }
 
     body {
@@ -29,13 +30,18 @@
       background: radial-gradient(circle at top, var(--bg-gradient-start), var(--bg-gradient-end));
       color: white;
       font-family: Arial, sans-serif;
+      /* 스마트폰 터치 조작 시 화면 드래그 방지 */
+      overflow-x: hidden;
     }
 
     .container {
       display: flex;
       gap: 24px;
       align-items: flex-start;
-      padding: 24px;
+      padding: 16px;
+      max-width: 1200px;
+      width: 100%;
+      justify-content: center;
     }
 
     .game-panel,
@@ -47,15 +53,22 @@
       box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
     }
 
+    .game-panel {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
     h1 {
       margin: 0 0 16px;
-      font-size: 34px;
+      font-size: 28px;
       letter-spacing: -1px;
+      text-align: center;
     }
 
     h2 {
       margin: 0 0 12px;
-      font-size: 20px;
+      font-size: 18px;
     }
 
     canvas {
@@ -63,6 +76,8 @@
       background: #020617;
       border: 3px solid #334155;
       border-radius: 12px;
+      max-width: 100%;
+      height: auto;
     }
 
     .side-panel {
@@ -81,19 +96,19 @@
     }
 
     #next {
-      width: 120px;
-      height: 120px;
+      width: 100px;
+      height: 100px;
       margin-bottom: 20px;
     }
 
     .controls {
       color: var(--text-muted);
-      font-size: 14px;
+      font-size: 13px;
       line-height: 1.7;
       margin-bottom: 18px;
     }
 
-    button {
+    .action-btn {
       width: 100%;
       padding: 12px;
       margin-top: 8px;
@@ -107,7 +122,7 @@
       transition: background 0.2s ease;
     }
 
-    button:hover {
+    .action-btn:hover {
       background: var(--accent-hover);
     }
 
@@ -120,25 +135,114 @@
       color: #fecaca;
       text-align: center;
       display: none;
+      width: 100%;
     }
 
     .leaderboard-list {
       font-size: 14px;
       color: var(--text-muted);
       line-height: 1.8;
+      max-height: 200px;
+      overflow-y: auto;
     }
 
-    @media (max-width: 720px) {
-      body {
-        align-items: flex-start;
-      }
+    /* 📱 모바일 가상 패드 스타일 */
+    .mobile-pad {
+      display: none; /* 기본적으로 데스크톱에선 숨김 */
+      grid-template-columns: repeat(5, 1fr);
+      gap: 8px;
+      width: 100%;
+      max-width: 320px;
+      margin-top: 16px;
+      user-select: none;
+    }
+
+    .pad-btn {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      color: white;
+      font-size: 18px;
+      font-weight: bold;
+      aspect-ratio: 1 / 1;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      cursor: pointer;
+    }
+
+    .pad-btn:active {
+      background: #334155;
+      color: var(--accent-color);
+    }
+
+    .pad-btn.wide {
+      grid-column: span 2;
+      aspect-ratio: auto;
+    }
+
+    /* ----------------------------------------------------
+       반응형 레이아웃 (스마트폰 최적화)
+       ---------------------------------------------------- */
+    @media (max-width: 768px) {
       .container {
         flex-direction: column;
         align-items: center;
+        gap: 16px;
       }
+
+      .game-panel {
+        width: 100%;
+        max-width: 340px;
+        padding: 12px;
+      }
+
+      canvas#board {
+        width: 100%; /* 화면 크기에 맞게 캔버스 압축 단, 비율 유지 */
+      }
+
       .side-panel {
         width: 100%;
-        max-width: 320px;
+        max-width: 340px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        padding: 16px;
+      }
+
+      .side-panel h2, 
+      .side-panel .controls {
+        display: none; /* 모바일에서 불필요한 안내 텍스트 숨김 */
+      }
+
+      .side-panel > div:first-of-type {
+        grid-column: span 1;
+      }
+
+      .side-panel > div:nth-of-type(2) {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+
+      #next {
+        margin-bottom: 0;
+      }
+
+      .side-panel button {
+        grid-column: span 2;
+        padding: 10px;
+        font-size: 14px;
+      }
+
+      .side-panel > div:last-of-type {
+        grid-column: span 2;
+        margin-top: 0 !important;
+      }
+
+      .mobile-pad {
+        display: grid; /* 모바일 디바이스 규격에서 활성화 */
       }
     }
   </style>
@@ -146,23 +250,35 @@
 <body>
   <div class="container">
     <div class="game-panel">
-      <!-- 대제목을 요청하신 대로 변경했습니다 -->
       <h1>지혜의 테트리스 게임</h1>
       <canvas id="board" width="300" height="600"></canvas>
       <div id="message" class="message">게임 오버! 다시 시작을 눌러주세요.</div>
+      
+      <!-- 모바일 컨트롤러 패드 -->
+      <div class="mobile-pad">
+        <div class="pad-btn" id="btn-left">←</div>
+        <div class="pad-btn" id="btn-rotate">↑</div>
+        <div class="pad-btn" id="btn-right">→</div>
+        <div class="pad-btn" id="btn-down">↓</div>
+        <div class="pad-btn" id="btn-drop">Drop</div>
+      </div>
     </div>
 
     <div class="side-panel">
-      <h2>상태</h2>
-      <div class="score-box">
-        점수 <strong id="score">0</strong><br />
-        라인 <strong id="lines">0</strong><br />
-        레벨 <strong id="level">1</strong><br />
-        상태 <strong id="status">진행중</strong>
+      <div>
+        <h2>상태</h2>
+        <div class="score-box">
+          점수 <strong id="score">0</strong><br />
+          라인 <strong id="lines">0</strong><br />
+          level <strong id="level">1</strong><br />
+          상태 <strong id="status">진행중</strong>
+        </div>
       </div>
 
-      <h2>다음 블록</h2>
-      <canvas id="next" width="120" height="120"></canvas>
+      <div>
+        <h2>다음 블록</h2>
+        <canvas id="next" width="120" height="120"></canvas>
+      </div>
 
       <div class="controls">
         ← → : 이동<br />
@@ -173,17 +289,16 @@
         R : 다시 시작
       </div>
 
-      <button onclick="togglePause()">일시정지 / 재개</button>
-      <button onclick="resetGame()">다시 시작</button>
+      <button class="action-btn" onclick="togglePause()">일시정지 / 재개</button>
+      <button class="action-btn" onclick="resetGame()">다시 시작</button>
 
       <div style="margin-top: 24px;">
-        <h2>🏆 실시간 랭킹</h2>
+        <h2>🏆 실시간 명예의 전당</h2>
         <div id="leaderboard" class="leaderboard-list">불러오는 중...</div>
       </div>
     </div>
   </div>
 
-  <!-- Firebase SDK 인라인 로드로 스크립트 파편화 방지 -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
@@ -197,18 +312,18 @@
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     // ----------------------------------------------------
-    // 0. GAME CONFIG & CONSTANTS (유지보수용 상수화)
+    // 0. GAME CONFIG & CONSTANTS
     // ----------------------------------------------------
     const GAME_SETTING = {
       COLS: 10,
       ROWS: 20,
       BLOCK_SIZE: 30,
-      NEXT_BLOCK_SIZE: 24,
-      BASE_SPEED: 850,       // 레벨 1 기본 속도 (ms)
-      SPEED_STEP: 70,        // 레벨업마다 빨라지는 속도
-      MIN_SPEED: 100,        // 최고 속도 제한
-      LINES_PER_LEVEL: 10,   // 레벨업 기준 라인 수
-      SCORE_TABLE: [0, 100, 300, 500, 800] // 라인 클리어 점수 (0~4라인)
+      NEXT_BLOCK_SIZE: 20,
+      BASE_SPEED: 850,
+      SPEED_STEP: 70,
+      MIN_SPEED: 100,
+      LINES_PER_LEVEL: 10,
+      SCORE_TABLE: [0, 100, 300, 500, 800]
     };
 
     const COLORS = {
@@ -227,7 +342,7 @@
     };
 
     // ----------------------------------------------------
-    // 1. FIREBASE INITIALIZATION & SERVICE
+    // 1. FIREBASE SERVICE
     // ----------------------------------------------------
     const firebaseConfig = {
       apiKey: "YOUR_API_KEY",
@@ -243,8 +358,17 @@
 
     async function dbSaveScore(finalScore) {
       if (finalScore <= 0) return;
+      
+      // 닉네임 입력 대화상자 호출
+      let nickname = prompt("축하합니다! 명예의 전당에 기록될 닉네임을 입력하세요 (최대 8자):");
+      
+      if (nickname === null) return; // 취소 누르면 저장 안 함
+      nickname = nickname.trim().substring(0, 8);
+      if (!nickname) nickname = "익명";
+
       try {
         await addDoc(collection(db, "leaderboard"), {
+          name: nickname, // 인명 필드 구조화 변경
           score: finalScore,
           createdAt: Date.now()
         });
@@ -271,7 +395,8 @@
         let rank = 1;
         snapshot.forEach((doc) => {
           const data = doc.data();
-          html += `${rank}. 익명 플레이어 — ${data.score}점<br>`;
+          const displayName = data.name || "익명 플레이어";
+          html += `${rank}. <b>${displayName}</b> — ${data.score}점<br>`;
           rank++;
         });
         document.getElementById("leaderboard").innerHTML = html;
@@ -377,7 +502,7 @@
     }
 
     // ----------------------------------------------------
-    // 4. CORE CORE CORE LOGIC (COLLISION & MOVEMENT)
+    // 4. CORE ENGINE LOGIC
     // ----------------------------------------------------
     function checkCollision(testPiece, offsetX = 0, offsetY = 0, newShape = testPiece.shape) {
       for (let y = 0; y < newShape.length; y++) {
@@ -497,7 +622,11 @@
       gameOver = true;
       document.getElementById("message").style.display = "block";
       syncUiState();
-      dbSaveScore(score); 
+      
+      // 약간의 딜레이를 주어 화면을 확인한 후 팝업이 뜨도록 유도
+      setTimeout(() => {
+        dbSaveScore(score);
+      }, 300);
     }
 
     window.togglePause = function() {
@@ -547,8 +676,9 @@
     }
 
     // ----------------------------------------------------
-    // 6. INITIALIZATION & EVENTS
+    // 6. CONTROL EVENTS (KEYBOARD & MOBILE TOUCH)
     // ----------------------------------------------------
+    // 데스크톱 키보드 바인딩
     document.addEventListener("keydown", event => {
       if (event.key === "ArrowLeft") movePiece(-1, 0);
       if (event.key === "ArrowRight") movePiece(1, 0);
@@ -562,7 +692,26 @@
       if (event.key.toLowerCase() === "r") resetGame();
     });
 
-    // 부트스트랩
+    // 스마트폰 가상 버튼 터치 바인딩 (스크롤/확대 오작동 캔슬 포함)
+    const touchButtons = [
+      { id: "btn-left", action: () => movePiece(-1, 0) },
+      { id: "btn-right", action: () => movePiece(1, 0) },
+      { id: "btn-rotate", action: () => rotatePiece() },
+      { id: "btn-down", action: () => movePiece(0, 1) },
+      { id: "btn-drop", action: () => dropInstantly() }
+    ];
+
+    touchButtons.forEach(btn => {
+      const element = document.getElementById(btn.id);
+      if (element) {
+        element.addEventListener("touchstart", (e) => {
+          e.preventDefault(); // 더블캡 확대 및 뷰포트 바운스 캔슬
+          btn.action();
+        }, { passive: false });
+      }
+    });
+
+    // 엔진 부트스트랩
     dbLoadLeaderboard();
     resetGame();
     gameLoop();
